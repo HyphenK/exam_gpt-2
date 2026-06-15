@@ -38,6 +38,26 @@ itos = {i: ch for ch, i in stoi.items()}
 
 처럼 문자 단위로 보고 토큰을 생성합니다.
 
+## 2. Token Embedding
+
+위의 예시에서,
+
+```text
+['h', 'e', 'l', 'l', 'o']
+```
+
+는 토큰화를 알파벳 순으로 한다고 가정하였을 때(이는 코드 내에서 실제로 이루어지는 과정과 크게 다르지 않음), 대략 다음과 같이 이루어집니다.
+
+```text
+[8, 5, 12, 12, 15]
+```
+
+이러한 숫자만으로는 예측을 하기 위한 어떠한 연산을 하기 어렵기 때문에, one-hot encoding을 이용하여 전체 N개(코드에서는 64개)의 수를 갖는 리스트(벡터) 중 8의 경우 8번째 수만 1이고 나머지는 0, 5의 경우 5번째 수만 1이고 나머지는 0, ...의 방법으로 토큰을 변환합니다.
+
+## 3. Position Embedding
+
+앞선 예시의 세 번째 l과 네 번째 l은 그 위치가 다르므로, 벡터에 주어지는 정보 또한 달라야 합니다. 이를 위해 앞선 Token Embedding 과정을 이용해 만든 리스트(벡터)에, 이 글자의 위치에 대한 정보도 추가한 것이 최종적으로 글자를 숫자 형태의 데이터로 변환한 결과가 됩니다.
+
 # GPT 답변 전문 (참고용)
 좋아. 처음 질문으로 돌아가면, 네 파일은 **GPT-2의 축소판 구조**를 꽤 잘 담고 있어. 다만 GPT-2 자체는 더 큰 모델이고, tokenizer나 학습 데이터 규모 등은 훨씬 복잡하다. 여기서는 **GPT-2의 구성품이 각각 무슨 역할을 하는지**를 네 코드와 연결해서 설명할게.
 
@@ -63,156 +83,6 @@ GPT-2는 크게 보면 이런 흐름이야.
 ```
 
 네 파일의 `TinyGPT`도 이 흐름을 거의 그대로 가지고 있다. `token_embedding`, `position_embedding`, 여러 개의 `Block`, 마지막 `LayerNorm`, `lm_head`가 들어 있다 .
-
----
-
-## 1. Tokenizer
-
-GPT-2에서 tokenizer는 **문장을 모델이 처리할 수 있는 숫자열로 바꾸는 역할**을 한다.
-
-예를 들어 문장이:
-
-```text
-I love machine learning.
-```
-
-이면 tokenizer는 이것을 대략 이런 식의 토큰 ID로 바꾼다.
-
-```text
-[40, 1842, 4572, 4673, 13]
-```
-
-GPT-2는 보통 **BPE 계열 subword tokenizer**를 사용한다. 즉, 글자 하나씩 보는 것도 아니고, 단어 하나씩 보는 것도 아니라, 자주 등장하는 단어 조각 단위로 나눈다.
-
-반면 네 파일은 훨씬 단순하게 **문자 단위 tokenizer**를 쓴다.
-
-```python
-chars = sorted(list(set(text)))
-stoi = {ch: i for i, ch in enumerate(chars)}
-itos = {i: ch for ch, i in stoi.items()}
-```
-
-이 부분에서 전체 텍스트에 등장하는 문자들을 모아 vocabulary를 만들고, 각 문자를 숫자 ID로 바꾼다 .
-
-즉, 네 모델은:
-
-```text
-"hello"
-```
-
-를 대략
-
-```text
-['h', 'e', 'l', 'l', 'o']
-```
-
-처럼 문자 단위로 본다.
-
-GPT-2는:
-
-```text
-"hello"
-```
-
-를 하나 또는 몇 개의 subword token으로 본다.
-
-**역할 요약:**
-Tokenizer는 자연어 문장을 모델이 계산할 수 있는 숫자 ID sequence로 바꾼다.
-
----
-
-## 2. Token embedding
-
-토큰 ID는 그냥 정수라서, 그 자체로는 의미 있는 벡터가 아니다.
-
-예를 들어:
-
-```text
-"God" → 123
-"earth" → 482
-"light" → 91
-```
-
-이 숫자들은 크기 자체에 의미가 없다. `482`가 `91`보다 더 큰 단어라는 뜻이 아니다.
-
-그래서 GPT는 각 token ID를 **고차원 벡터**로 바꾼다. 이게 token embedding이다.
-
-네 코드에서는 이 부분이다.
-
-```python
-self.token_embedding = nn.Embedding(vocab_size, emb_dim)
-```
-
-그리고 forward에서:
-
-```python
-tok = self.token_embedding(x)
-```
-
-로 토큰 ID를 벡터로 바꾼다 .
-
-예를 들어 `emb_dim=128`이면 각 문자는 128차원 벡터가 된다.
-
-```text
-'A' → [0.12, -0.55, ..., 0.31]
-'B' → [-0.08, 0.41, ..., -0.17]
-```
-
-**역할 요약:**
-Token embedding은 각 토큰을 의미를 담을 수 있는 벡터 공간으로 옮긴다.
-
----
-
-## 3. Position embedding
-
-Transformer는 RNN처럼 순서대로 읽는 구조가 아니다. 입력 문장 전체를 한 번에 행렬로 처리한다.
-
-그래서 그냥 token embedding만 있으면 모델은 다음 두 문장의 차이를 알기 어렵다.
-
-```text
-A B C
-C B A
-```
-
-등장한 토큰은 같지만 순서가 다르다.
-
-따라서 GPT는 각 위치 정보도 벡터로 추가한다. 이게 position embedding이다.
-
-네 코드에서는:
-
-```python
-self.position_embedding = nn.Embedding(block_size, emb_dim)
-```
-
-그리고 forward에서:
-
-```python
-pos = torch.arange(T, device=x.device)
-pos = self.position_embedding(pos)[None]
-h = tok + pos
-```
-
-라고 되어 있다 .
-
-즉, 최종 입력 벡터는:
-
-```text
-토큰 의미 벡터 + 위치 벡터
-```
-
-가 된다.
-
-예를 들어 같은 `"God"`이라는 토큰이어도:
-
-```text
-1번째 위치의 God
-10번째 위치의 God
-```
-
-은 서로 다른 입력 표현을 갖는다.
-
-**역할 요약:**
-Position embedding은 모델에게 “이 토큰이 문장 안에서 몇 번째 위치에 있는지” 알려준다.
 
 ---
 
